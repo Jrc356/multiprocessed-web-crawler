@@ -13,8 +13,8 @@ Import the Crawler from the package
 Now to crawl the sites, create a list of starting points  
 `startingPoints = ["www.wikipedia.com"]`  
 
-From here, specify the output file name and the number of cycles and let er go:  
-`Crawler("my_save_file.txt", 3).crawl(startingPoints)`  
+From here, specify the output file name (use a json file) and the number of cycles and let er go:  
+`Crawler("my_save_file.json", 3).crawl(startingPoints)`  
 
 The links are written to the file after every iteration.
 
