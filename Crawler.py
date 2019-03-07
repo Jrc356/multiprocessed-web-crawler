@@ -1,23 +1,26 @@
-from multiprocessing import Pool, cpu_count
+from multiprocessing import Pool, cpu_count, Queue
 import requests
 import bs4 as bs #BeautifulSoup
 import string
 import random
 from collections import Counter
+import json
+from os.path import exists
 
 class Crawler:
     def __init__(self, saveFileName, cycles):
         self.saveFileName = saveFileName
         self.cycles = cycles
+        self.currentCycle = 0
         self.totalLinkCount = 0
 
     #Worker
-    def getLinks(self, url):
-        baseUrl = "/".join(url.split("/")[:3])
-        links = []
-        print("Collecting links from {}".format(url))
+    def worker(self, url):
         try:
             page = requests.get(url)
+            print("Collecting links from {}".format(page.url))
+            baseUrl = "/".join(page.url.split("/")[:3])
+            links = []
             soup = bs.BeautifulSoup(page.text, 'lxml')
             for link in soup.find_all('a'):
                 linkRef = link.get('href')
@@ -33,8 +36,8 @@ class Crawler:
 
                 links.append(linkRef)
 
-            print("{} links collected from {}".format(len(links), url))
-            return links
+            print("{} links collected from {}".format(len(links), page.url))
+            return {page.url:links}
 
         #Catch connection errors if url does not exist
         except ConnectionError as e:
@@ -59,42 +62,46 @@ class Crawler:
 
     def writeLinks(self, linkList):
         #Write links to file
-        if len(linkList) > 0 and linkList[0] != None:
-            flattened = []
-            with open(self.saveFileName, "w", encoding="utf_8") as f:
-                for links in linkList:
-                    for link in links:
-                        if link == None:
-                            continue
-                        f.write(link + "\n")
-                        flattened.append(link)
-                        self.totalLinkCount += 1
-                linkList = flattened
-        else:
-            print("No links collected")
+        flattened = []
+        for d in linkList:
+            v = next(iter(d.values()))
+            if len(v) > 0 and v[0] != None:
+                mode = "w"
+                if exists(self.saveFileName) and self.currentCycle > 1:
+                    mode = "a"
 
-        return linkList
+                with open(self.saveFileName, mode, encoding="utf_8") as f:
+                    if mode == "a":
+                        f.write(",")
+                    json.dump(d, f)
+                
+                for link in v:
+                    if link == None:
+                        continue
+                    flattened.append(link)
+                    self.totalLinkCount += 1
+        
+            else:
+                print("No links collected")
+
+        return flattened
         
 
     def printSummary(self):
         print("\n" + "#"*75)
         print("{} total links found after {} cycles.".format(self.totalLinkCount, self.cycles))
-        
-        with open(self.saveFileName, "r") as f:
-            counter = Counter(f.readlines())
-
-        print("Most Common links found:\nCount|Link\n{}".format("\n".join("{}| {}".format(count, link.replace("\n", "")) for link, count in counter.most_common(5))))
+        #print(counter.most_common(5))
         print("#"*75)
 
 
     def crawl(self, linkList):
         with Pool(cpu_count()-1) as p:
             for i in range(self.cycles):
+                self.currentCycle += 1
                 print("\nStart Pool #"+str(i+1))
-                linkList = p.map(self.getLinks, linkList)
-
+                linkList = p.map(self.worker, linkList)
                 linkList = self.writeLinks(linkList)
-        print("testing")
+
         print("\nCompleted all cycles, generating summary...")
         self.printSummary()
 
@@ -102,5 +109,5 @@ class Crawler:
 
 if __name__ == '__main__':
     link_ls = ['https://en.wikipedia.org/wiki/Special:Random'] #wikipedia's random article link
-    Crawler("links.txt", 3).crawl(link_ls)
+    Crawler("links.json", 2).crawl(link_ls)
     print("Complete")
