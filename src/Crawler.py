@@ -1,5 +1,6 @@
 from multiprocessing import Pool, cpu_count, Queue
 import requests
+from requests.exceptions import ConnectionError
 import bs4 as bs #BeautifulSoup
 import string
 import random
@@ -17,6 +18,8 @@ class Crawler:
     #Worker
     def worker(self, url):
         try:
+            if not (url.startswith("http://") or url.startswith("https://")):
+                url = "http://" + url
             page = requests.get(url)
             print("Collecting links from {}".format(page.url))
             baseUrl = "/".join(page.url.split("/")[:3])
@@ -41,7 +44,6 @@ class Crawler:
 
         #Catch connection errors if url does not exist
         except ConnectionError as e:
-            print(e)
             print("Connection Error to " + url)
             return []
         #Catch the rest of exceptions in a rather unfavorable way
